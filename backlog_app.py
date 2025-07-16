@@ -10,39 +10,46 @@ import matplotlib.pyplot as plt
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
 CREDS = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=SCOPES)
 client = gspread.authorize(CREDS)
+
 SHEET_ID = "1jeooSyD_3NTroYkIQwL5upJh5hC4l3J4cGXw07352EI"
 wb = client.open_by_key(SHEET_ID)
 
-# Backlog sheet
 try:
     ws = wb.worksheet("Backlog")
 except gspread.exceptions.WorksheetNotFound:
     ws = wb.add_worksheet("Backlog", rows="100", cols="3")
     ws.append_row(["Subject","Number of Lectures","Last Updated"])
 
-# History sheet
 try:
     hist_ws = wb.worksheet("History")
 except gspread.exceptions.WorksheetNotFound:
     hist_ws = wb.add_worksheet("History", rows="365", cols="2")
     hist_ws.append_row(["Date","Total Backlog"])
 
-# ==== DATA LOAD/SAVE ====
+# ==== DEBUG WRAPPER ====
+def safe_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        st.error(f"❌ Write failed: {e}")
+        st.stop()
+
+# ==== DATA I/O ====
 @st.cache_data(ttl=0)
 def load_backlog():
     df = pd.DataFrame(ws.get_all_records())
     expected = ["Subject","Number of Lectures","Last Updated"]
     if list(df.columns) != expected:
-        ws.clear()
-        ws.append_row(expected)
+        safe_call(ws.clear)
+        safe_call(ws.append_row, expected)
         return pd.DataFrame(columns=expected)
     return df
 
 def save_backlog(df: pd.DataFrame):
-    ws.clear()
-    ws.append_row(list(df.columns))
-    if not df.empty:
-        ws.append_rows(df.values.tolist())
+    safe_call(ws.clear)
+    safe_call(ws.append_row, df.columns.tolist())
+    for row in df.values.tolist():
+        safe_call(ws.append_row, row)
     st.cache_data.clear()
 
 @st.cache_data(ttl=0)
@@ -50,23 +57,22 @@ def load_history():
     h = pd.DataFrame(hist_ws.get_all_records())
     expected = ["Date","Total Backlog"]
     if list(h.columns) != expected:
-        hist_ws.clear()
-        hist_ws.append_row(expected)
+        safe_call(hist_ws.clear)
+        safe_call(hist_ws.append_row, expected)
         return pd.DataFrame(columns=expected)
     return h
 
-def log_history_if_needed(total: int):
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    h = load_history()
-    if h.empty or h["Date"].iloc[-1] != today:
-        hist_ws.append_row([today, total])
+def log_history_if_needed(total):
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    hist = load_history()
+    if hist.empty or hist["Date"].iloc[-1] != today_str:
+        safe_call(hist_ws.append_row, [today_str, int(total)])
         st.cache_data.clear()
 
 # ==== BUSINESS LOGIC ====
-def auto_increment_once(df: pd.DataFrame) -> pd.DataFrame:
+def auto_increment_once(df):
     today = datetime.date.today()
     hist = load_history()
-    # only once per day
     if not hist.empty and hist["Date"].iloc[-1] == today.strftime("%Y-%m-%d"):
         return df
     if today.weekday() == 6:  # Sunday
@@ -88,13 +94,13 @@ def auto_increment_once(df: pd.DataFrame) -> pd.DataFrame:
         log_history_if_needed(df["Number of Lectures"].sum())
     return df
 
-def mark_done(df: pd.DataFrame, subject: str, done: int) -> pd.DataFrame:
+def mark_done(df, subject, done):
     today = datetime.date.today()
     idx = df.index[df["Subject"] == subject][0]
     curr = int(df.at[idx, "Number of Lectures"])
-    if today.weekday() == 6:  # Sunday: full
+    if today.weekday() == 6:
         new = max(0, curr - done)
-    else:                     # Weekday: need done-1
+    else:
         new = max(0, curr - (done - 1))
     df.at[idx, "Number of Lectures"] = new
     df.at[idx, "Last Updated"] = today.strftime("%Y-%m-%d")
@@ -103,7 +109,7 @@ def mark_done(df: pd.DataFrame, subject: str, done: int) -> pd.DataFrame:
     st.success(f"{subject} updated by {done} lectures!")
     return df
 
-def estimate(df: pd.DataFrame, pace: int) -> dict:
+def estimate(df, pace):
     net_weekly = pace * 7 - 6
     out = {}
     for _, r in df.iterrows():
@@ -112,18 +118,18 @@ def estimate(df: pd.DataFrame, pace: int) -> dict:
         out[r["Subject"]] = days
     return out
 
-# ==== STREAMLIT UI ====
+# ==== UI ====
 st.set_page_config(page_title="JEE Backlog", layout="centered")
 st.title("📚 JEE Backlog Tracker")
 
-# 1) Load & Sync
+# Load and sync
 data = load_backlog()
 data = auto_increment_once(data)
 
-# 2) Mark Done
+# Mark Done
 st.subheader("✅ Mark Lectures Done")
 if data.empty:
-    st.info("No subjects yet. Add below.")
+    st.info("No subjects yet. Add one below.")
 else:
     c1, c2, c3 = st.columns([3,2,2])
     sub = c1.selectbox("Subject", data["Subject"])
@@ -133,16 +139,16 @@ else:
 
 st.markdown("---")
 
-# 3) Force Sync
+# Force Sync
 if st.button("🔄 Force Sync"):
     data = auto_increment_once(data)
-    st.success("Force sync done!")
+    st.success("Force sync complete.")
 
 st.markdown("---")
 
-# 4) Add Subject
+# Add Subject
 st.subheader("➕ Add New Subject")
-with st.form("add_form"):
+with st.form("add"):
     new_sub = st.text_input("Subject Name").strip()
     new_back = st.number_input("Starting Backlog", min_value=0, step=1)
     if st.form_submit_button("Add"):
@@ -152,30 +158,34 @@ with st.form("add_form"):
             st.warning("Subject exists.")
         else:
             today = datetime.date.today().strftime("%Y-%m-%d")
-            data = data.append({"Subject":new_sub, "Number of Lectures":int(new_back),
-                                "Last Updated":today}, ignore_index=True)
+            data = data.append({
+                "Subject": new_sub,
+                "Number of Lectures": int(new_back),
+                "Last Updated": today
+            }, ignore_index=True)
             save_backlog(data)
             st.success(f"Added {new_sub}.")
 
 st.markdown("---")
 
-# 5) Graph & ETA
+# History Graph & ETA
 hist = load_history()
 if hist.empty:
-    st.info("No history yet.")
+    st.info("No history to plot yet.")
 else:
     hist["Date"] = pd.to_datetime(hist["Date"])
     hist["Total Backlog"] = hist["Total Backlog"].astype(int)
     fig, ax = plt.subplots()
     ax.plot(hist["Date"], hist["Total Backlog"], marker="o")
-    ax.set_title("Backlog Over Time"); ax.set_xlabel("Date"); ax.set_ylabel("Lectures")
+    ax.set_title("Backlog Over Time")
+    ax.set_xlabel("Date"); ax.set_ylabel("Lectures")
     st.pyplot(fig)
 
 st.subheader("⏱ Estimated Time to Clear Backlog")
-pace = st.slider("Daily pace",1,10,1)
+pace = st.slider("Daily pace (lectures/day)", 1, 10, 1)
 est = estimate(data, pace)
 if est:
     df_est = pd.DataFrame([{"Subject":s,"Days":d,"Weeks":d//7} for s,d in est.items()])
     st.table(df_est)
 else:
-    st.info("Add subjects to estimate.")
+    st.info("No subjects to estimate yet.")
