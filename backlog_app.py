@@ -2,88 +2,163 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-from datetime import datetime, timedelta
+import datetime
+import matplotlib.pyplot as plt
 
-# ---- AUTH ----
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-CREDS = Credentials.from_service_account_info(
-    st.secrets["google_service_account"], scopes=SCOPES
-)
+# ---- GOOGLE SHEETS AUTH ----
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+CREDS = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=SCOPES)
 client = gspread.authorize(CREDS)
 
 # ---- CONFIG ----
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1jeooSyD_3NTroYkIQwL5upJh5hC4l3J4cGXw07352EI/edit"
-SHEET = client.open_by_url(SHEET_URL).sheet1
+SHEET = client.open_by_url(SHEET_URL)
+DATA_SHEET = SHEET.worksheet("Backlog")
+LOG_SHEET = SHEET.worksheet("Log")
 
-# ---- FUNCTIONS ----
-def get_data():
-    try:
-        data = SHEET.get_all_records()
-        if not data:
-            return pd.DataFrame(columns=["Subject", "Lectures", "Last Updated"])
-        return pd.DataFrame(data)
-    except:
-        return pd.DataFrame(columns=["Subject", "Lectures", "Last Updated"])
+# ---- INIT ----
+def init_sheets():
+    if DATA_SHEET.row_count < 2:
+        DATA_SHEET.append_row(["Subject", "Lectures", "Last Updated"])
+    if LOG_SHEET.row_count < 2:
+        LOG_SHEET.append_row(["Date", "Total Backlog", "Lectures Done"])
+
+init_sheets()
+
+# ---- FETCH DATA ----
+def fetch_data():
+    data = DATA_SHEET.get_all_records()
+    return pd.DataFrame(data)
 
 def save_data(df):
-    SHEET.clear()
-    SHEET.append_row(["Subject", "Lectures", "Last Updated"])
-    for _, row in df.iterrows():
-        SHEET.append_row(list(row))
+    DATA_SHEET.clear()
+    DATA_SHEET.append_row(["Subject", "Lectures", "Last Updated"])
+    DATA_SHEET.append_rows(df.values.tolist())
 
-def auto_increment(df):
-    today = datetime.now().date()
-    for idx, row in df.iterrows():
-        try:
-            last_updated = datetime.strptime(row["Last Updated"], "%Y-%m-%d").date()
-        except Exception:
-            last_updated = today
-        days_passed = (today - last_updated).days
-        increment_days = 0
-        for i in range(1, days_passed + 1):
-            if (last_updated + timedelta(days=i)).weekday() != 6:  # Skip Sundays
-                increment_days += 1
-        df.at[idx, "Lectures"] = int(row["Lectures"]) + increment_days
-        df.at[idx, "Last Updated"] = str(today)
+# ---- AUTO SYNC ----
+def sync_backlog(df):
+    today = datetime.date.today()
+    for i in range(len(df)):
+        last = datetime.datetime.strptime(df.loc[i, "Last Updated"], "%Y-%m-%d").date()
+        missed_days = [last + datetime.timedelta(days=x+1) for x in range((today - last).days)]
+        missed_days = [d for d in missed_days if d.weekday() != 6]  # exclude Sundays
+        df.loc[i, "Lectures"] += len(missed_days)
+        df.loc[i, "Last Updated"] = str(today)
     return df
 
-# ---- MAIN APP ----
-st.set_page_config(page_title="📚 JEE Backlog Tracker", layout="centered")
+# ---- MARK AS DONE ----
+def mark_done(subject, df):
+    today = datetime.date.today()
+    lectures_done = st.session_state.get(f"done_{subject}", 0)
+    for i in range(len(df)):
+        if df.loc[i, "Subject"] == subject:
+            if today.weekday() == 6:  # Sunday
+                df.loc[i, "Lectures"] = max(0, df.loc[i, "Lectures"] - lectures_done)
+            else:
+                df.loc[i, "Lectures"] = max(0, df.loc[i, "Lectures"] - max(0, lectures_done - 1))
+            break
+    log_today(lectures_done)
+    return df
+
+# ---- FORCE SYNC ----
+def force_sync(df):
+    return sync_backlog(df)
+
+# ---- LOGGING ----
+def log_today(lectures_done):
+    today = str(datetime.date.today())
+    backlog = fetch_data()["Lectures"].sum()
+    LOG_SHEET.append_row([today, backlog, lectures_done])
+
+# ---- ESTIMATE ----
+def estimate_days():
+    log_df = pd.DataFrame(LOG_SHEET.get_all_records())
+    if len(log_df) < 2:
+        return "Need more data to estimate!"
+    
+    # compute total lectures done, excluding zeros
+    total_done = log_df["Lectures Done"].sum()
+    total_days = len(log_df)
+
+    if total_days == 0 or total_done == 0:
+        return "No lectures logged yet!"
+
+    avg_per_day = total_done / total_days
+    backlog = fetch_data()["Lectures"].sum()
+
+    # Calculate effective reduction rate:
+    # Weekdays: need 2 to reduce by 1
+    # Sundays: 1:1
+    # Assuming 1 Sunday in every 7 days
+    sunday_ratio = 1 / 7
+    weekday_ratio = 6 / 7
+    effective_rate = (sunday_ratio * avg_per_day) + (weekday_ratio * (avg_per_day - 1) / 2)
+
+    if effective_rate <= 0:
+        return "Backlog increasing! 🫠"
+    days_needed = backlog / effective_rate
+    return f"At current pace: {int(days_needed)} days (~{int(days_needed//7)} weeks)"
+
+# ---- GRAPH ----
+def plot_graph():
+    df = pd.DataFrame(LOG_SHEET.get_all_records())
+    if df.empty:
+        st.warning("No data to show yet!")
+        return
+
+    df["Date"] = pd.to_datetime(df["Date"])
+    df["Backlog"] = df["Total Backlog"]
+    df = df.sort_values("Date")
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(df["Date"], df["Backlog"], marker='o')
+    plt.title("Backlog Over Time")
+    plt.xlabel("Date")
+    plt.ylabel("Total Backlog")
+    st.pyplot(plt)
+
+# ---- UI ----
 st.title("📚 JEE Backlog Tracker")
 
-df = get_data()
+data = fetch_data()
+data = sync_backlog(data)
 
-if not df.empty:
-    df = auto_increment(df)
-    save_data(df)
+# Add Subject
+with st.form("add_form"):
+    sub = st.text_input("📌 Subject Name")
+    lec = st.number_input("🎥 No. of Lectures", min_value=1, step=1)
+    submitted = st.form_submit_button("Add Subject")
+    if submitted:
+        if sub in data["Subject"].values:
+            st.warning("Subject already exists!")
+        else:
+            today = str(datetime.date.today())
+            data = pd.concat([data, pd.DataFrame([[sub, lec, today]], columns=["Subject", "Lectures", "Last Updated"])], ignore_index=True)
+            st.success("Added!")
 
-st.subheader("➕ Add New Subject")
-subject = st.text_input("Subject Name")
-lectures = st.number_input("Number of Lectures", min_value=0, step=1)
+# Display Subjects
+for i in range(len(data)):
+    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+    with col1:
+        st.write(f"📘 {data.loc[i, 'Subject']}")
+    with col2:
+        st.write(f"📊 {int(data.loc[i, 'Lectures'])} lectures")
+    with col3:
+        st.number_input("✅ Lectures done", min_value=0, key=f"done_{data.loc[i, 'Subject']}")
+    with col4:
+        if st.button("Mark as Done", key=f"btn_{data.loc[i, 'Subject']}"):
+            data = mark_done(data.loc[i, "Subject"], data)
 
-if st.button("Add Subject"):
-    if subject.strip() == "":
-        st.warning("Enter a subject name.")
-    elif "Subject" in df.columns and subject in df["Subject"].values:
-        st.warning("Subject already exists.")
-    else:
-        new_row = pd.DataFrame([{
-            "Subject": subject,
-            "Lectures": int(lectures),
-            "Last Updated": str(datetime.now().date())
-        }])
-        df = pd.concat([df, new_row], ignore_index=True)
-        save_data(df)
-        st.success(f"Subject '{subject}' added!")
+# Force Sync
+if st.button("🔄 Force Sync"):
+    data = force_sync(data)
+    st.success("Synced!")
 
-st.divider()
-st.subheader("📈 Current Backlog")
+save_data(data)
 
-if df.empty:
-    st.info("No data yet. Add some subjects to get started!")
-else:
-    for _, row in df.iterrows():
-        st.markdown(f"**{row['Subject']}** — `{row['Lectures']} lectures`")
+# Graph & ETA
+st.subheader("📈 Backlog History")
+plot_graph()
+
+st.subheader("⏳ Estimated Time to Clear Backlog")
+st.info(estimate_days())
