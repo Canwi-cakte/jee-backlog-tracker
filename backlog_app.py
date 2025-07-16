@@ -22,6 +22,8 @@ SHEET = client.open_by_url(SHEET_URL).sheet1
 def get_data():
     try:
         data = SHEET.get_all_records()
+        if not data:
+            return pd.DataFrame(columns=["Subject", "Lectures", "Last Updated"])
         return pd.DataFrame(data)
     except:
         return pd.DataFrame(columns=["Subject", "Lectures", "Last Updated"])
@@ -34,21 +36,18 @@ def save_data(df):
 
 def auto_increment(df):
     today = datetime.now().date()
-    is_sunday = today.weekday() == 6  # 6 = Sunday
-
     for idx, row in df.iterrows():
-        last_updated = datetime.strptime(row["Last Updated"], "%Y-%m-%d").date()
+        try:
+            last_updated = datetime.strptime(row["Last Updated"], "%Y-%m-%d").date()
+        except Exception:
+            last_updated = today
         days_passed = (today - last_updated).days
-
-        # Add +1 for each day passed, skip Sundays
-        if days_passed > 0:
-            increment_days = 0
-            for i in range(1, days_passed + 1):
-                if (last_updated + timedelta(days=i)).weekday() != 6:
-                    increment_days += 1
-            df.at[idx, "Lectures"] = int(row["Lectures"]) + increment_days
-            df.at[idx, "Last Updated"] = str(today)
-
+        increment_days = 0
+        for i in range(1, days_passed + 1):
+            if (last_updated + timedelta(days=i)).weekday() != 6:  # Skip Sundays
+                increment_days += 1
+        df.at[idx, "Lectures"] = int(row["Lectures"]) + increment_days
+        df.at[idx, "Last Updated"] = str(today)
     return df
 
 # ---- MAIN APP ----
@@ -61,14 +60,14 @@ if not df.empty:
     df = auto_increment(df)
     save_data(df)
 
-st.subheader("Add New Subject")
+st.subheader("➕ Add New Subject")
 subject = st.text_input("Subject Name")
 lectures = st.number_input("Number of Lectures", min_value=0, step=1)
 
-if st.button("➕ Add Subject"):
+if st.button("Add Subject"):
     if subject.strip() == "":
         st.warning("Enter a subject name.")
-    elif subject in df["Subject"].values:
+    elif "Subject" in df.columns and subject in df["Subject"].values:
         st.warning("Subject already exists.")
     else:
         new_row = pd.DataFrame([{
@@ -88,4 +87,3 @@ if df.empty:
 else:
     for _, row in df.iterrows():
         st.markdown(f"**{row['Subject']}** — `{row['Lectures']} lectures`")
-
