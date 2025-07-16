@@ -29,7 +29,7 @@ except gspread.exceptions.WorksheetNotFound:
     hist_ws.update("A1:B1", [["Date","Total Backlog"]])
 
 # ==== DATA LOAD/SAVE ====
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=0)
 def load_backlog():
     df = pd.DataFrame(ws.get_all_records())
     expected = ["Subject","Number of Lectures","Last Updated"]
@@ -44,7 +44,7 @@ def save_backlog(df: pd.DataFrame):
     if not df.empty:
         ws.update("A2", df.values.tolist())
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=0)
 def load_history():
     h = pd.DataFrame(hist_ws.get_all_records())
     if list(h.columns) != ["Date","Total Backlog"]:
@@ -98,7 +98,7 @@ def mark_done(df, subject, done):
     save_backlog(df)
     log_history_if_needed(df["Number of Lectures"].sum())
     st.cache_data.clear()
-    return df
+    st.success(f"{subject} updated by {done} lectures!")
 
 def estimate(df, pace):
     net_weekly = pace * 7 - 6
@@ -129,9 +129,7 @@ else:
     subject = c1.selectbox("Subject", data["Subject"])
     done = c2.number_input("Lectures done", min_value=0, step=1, key="done_input")
     if c3.button("Mark Done"):
-        data = mark_done(data, subject, done)
-        st.success(f"Updated {subject} by {done} lectures.")
-        st.experimental_rerun()
+        mark_done(data, subject, done)
 
 st.markdown("---")
 
@@ -139,7 +137,6 @@ st.markdown("---")
 if st.button("🔄 Force Sync"):
     data = auto_increment_once(data)
     st.success("Synced!")
-    st.experimental_rerun()
 
 st.markdown("---")
 
@@ -156,8 +153,8 @@ with st.form("add_form"):
         else:
             today_str = datetime.date.today().strftime("%Y-%m-%d")
             ws.append_row([new_sub, int(new_back), today_str])
+            st.cache_data.clear()
             st.success(f"Added {new_sub}.")
-            st.experimental_rerun()
 
 st.markdown("---")
 
