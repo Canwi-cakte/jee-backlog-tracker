@@ -64,10 +64,10 @@ def mark_done(df, subject, done):
     today = datetime.date.today()
     idx = df.index[df["Subject"] == subject][0]
     curr = int(df.at[idx, "Number of Lectures"])
-    if today.weekday() == 6:
-        new_val = max(0, curr - done)
-    else:
-        new_val = max(0, curr - (done - 1))
+
+    # 🧠 Updated logic: just subtract exactly how many lectures user says they did
+    new_val = max(0, curr - done)
+
     df.at[idx, "Number of Lectures"] = new_val
     df.at[idx, "Last Updated"] = today.strftime("%Y-%m-%d")
     save_backlog(df)
