@@ -123,25 +123,31 @@ if st.button("🔄 Force Sync"):
 
 st.markdown("---")
 
-# 4) Add New Subject
-st.subheader("➕ Add New Subject")
+# 4) Add or Update Subject
+st.subheader("➕ Add or Update Subject")
 with st.form("add_form"):
     new_sub = st.text_input("Subject Name").strip()
-    new_back = st.number_input("Starting Backlog", min_value=0, step=1)
-    if st.form_submit_button("Add Subject"):
+    new_back = st.number_input("Backlog Lectures", min_value=0, step=1)
+    if st.form_submit_button("Add / Update Subject"):
         if not new_sub:
             st.warning("Enter a subject name.")
-        elif new_sub in df["Subject"].tolist():
-            st.warning("Subject already exists.")
         else:
             today_str = datetime.date.today().strftime("%Y-%m-%d")
-            new_row = pd.DataFrame([[new_sub, new_back, today_str]],
-                                   columns=["Subject","Number of Lectures","Last Updated"])
-            df = pd.concat([df, new_row], ignore_index=True)
+            if new_sub in df["Subject"].values:
+                # Update existing subject
+                df.loc[df["Subject"] == new_sub, "Number of Lectures"] = new_back
+                df.loc[df["Subject"] == new_sub, "Last Updated"] = today_str
+                st.success(f"Updated '{new_sub}' to {new_back} lectures.")
+            else:
+                # Add new subject
+                new_row = pd.DataFrame([[new_sub, new_back, today_str]],
+                                       columns=["Subject", "Number of Lectures", "Last Updated"])
+                df = pd.concat([df, new_row], ignore_index=True)
+                st.success(f"Added subject '{new_sub}' with {new_back} lectures.")
+
             save_backlog(df)
             log_history(df["Number of Lectures"].sum())
             st.session_state.df = df
-            st.success(f"Added subject '{new_sub}'.")
 
 st.markdown("---")
 
