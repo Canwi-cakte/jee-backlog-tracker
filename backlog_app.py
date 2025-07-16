@@ -136,6 +136,24 @@ with st.form("add_form"):
         else:
             # new subject — add it
             data.loc[len(data)] = [sub, lectures, today.strftime("%Y-%m-%d")]
+with st.form("Add Subject"):
+    sub = st.text_input("Enter subject name:")
+    lectures = st.number_input("Enter number of lectures to add:", min_value=1, step=1)
+    submit = st.form_submit_button("Add / Update Subject")
+
+if submit and sub:
+    today = datetime.date.today()
+
+    if not data.empty and "Subject" in data.columns and sub in data["Subject"].values:
+        idx = data.index[data["Subject"] == sub][0]
+        data.at[idx, "Lectures"] = int(data.at[idx, "Lectures"]) + lectures
+        data.at[idx, "Last Updated"] = today.strftime("%Y-%m-%d")
+    else:
+        data.loc[len(data)] = [sub, lectures, today.strftime("%Y-%m-%d")]
+
+    # Sync to sheet
+    worksheet.update([data.columns.values.tolist()] + data.values.tolist())
+    st.success(f"{sub} updated with +{lectures} lecture(s)!")
 
 
 # Display Subjects
