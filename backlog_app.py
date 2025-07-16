@@ -13,12 +13,14 @@ client = gspread.authorize(CREDS)
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1jeooSyD_3NTroYkIQwL5upJh5hC4l3J4cGXw07352EI"
 wb = client.open_by_url(SHEET_URL)
+
 # Backlog worksheet
 try:
     ws = wb.worksheet("Backlog")
 except gspread.exceptions.WorksheetNotFound:
     ws = wb.add_worksheet(title="Backlog", rows="100", cols="3")
     ws.update("A1:C1", [["Subject","Number of Lectures","Last Updated"]])
+
 # History worksheet
 try:
     hist_ws = wb.worksheet("History")
@@ -36,7 +38,7 @@ def load_backlog():
         return pd.DataFrame(columns=expected)
     return df
 
-def save_backlog(df):
+def save_backlog(df: pd.DataFrame):
     ws.clear()
     ws.update("A1:C1",[df.columns.tolist()])
     if not df.empty:
@@ -50,85 +52,93 @@ def load_history():
         return pd.DataFrame(columns=["Date","Total Backlog"])
     return h
 
-def log_history_if_needed(total):
-    today = datetime.date.today().strftime("%Y-%m-%d")
+def log_history_if_needed(total_backlog):
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
     hist = load_history()
-    if hist.empty or hist["Date"].iloc[-1]!=today:
-        hist_ws.append_row([today, total])
+    # Only append if today's entry is missing
+    if hist.empty or hist["Date"].iloc[-1] != today_str:
+        hist_ws.append_row([today_str, int(total_backlog)])
 
-# ==== LOGIC ====
+# ==== BUSINESS LOGIC ====
 def auto_increment_once(df):
     today = datetime.date.today()
     hist = load_history()
-    if not hist.empty and hist["Date"].iloc[-1]==today.strftime("%Y-%m-%d"):
+    # If we've already logged today, skip
+    if not hist.empty and hist["Date"].iloc[-1] == today.strftime("%Y-%m-%d"):
         return df
-    if today.weekday()==6:
+    # Sundays get no auto‑increment
+    if today.weekday() == 6:
         return df
-    changed=False
-    for i,row in df.iterrows():
-        last = datetime.datetime.strptime(row["Last Updated"],"%Y-%m-%d").date()
-        days=(today-last).days
-        inc = sum(1 for d in range(1,days+1)
-                  if (last+datetime.timedelta(days=d)).weekday()!=6)
-        if inc>0:
-            df.at[i,"Number of Lectures"] = int(row["Number of Lectures"])+inc
-            df.at[i,"Last Updated"]=today.strftime("%Y-%m-%d")
-            changed=True
+
+    changed = False
+    for i, row in df.iterrows():
+        last = datetime.datetime.strptime(row["Last Updated"], "%Y-%m-%d").date()
+        days = (today - last).days
+        inc = sum(1 for d in range(1, days+1)
+                  if (last + datetime.timedelta(days=d)).weekday() != 6)
+        if inc > 0:
+            df.at[i, "Number of Lectures"] = int(row["Number of Lectures"]) + inc
+            df.at[i, "Last Updated"] = today.strftime("%Y-%m-%d")
+            changed = True
+
     if changed:
         save_backlog(df)
         log_history_if_needed(df["Number of Lectures"].sum())
         st.cache_data.clear()
     return df
 
-def mark_done(df,subject,done):
-    today=datetime.date.today()
-    idx=df.index[df["Subject"]==subject][0]
-    curr=int(df.at[idx,"Number of Lectures"])
-    if today.weekday()==6:
-        new=max(0,curr-done)
-    else:
-        net=done-1
-        new=max(0,curr-net)
-    df.at[idx,"Number of Lectures"]=new
-    df.at[idx,"Last Updated"]=today.strftime("%Y-%m-%d")
+def mark_done(df, subject, done):
+    today = datetime.date.today()
+    idx = df.index[df["Subject"] == subject][0]
+    curr = int(df.at[idx, "Number of Lectures"])
+    if today.weekday() == 6:  # Sunday: each lecture reduces backlog by 1
+        new = max(0, curr - done)
+    else:                     # Weekday: need done‑1 net to reduce by 1
+        net = done - 1
+        new = max(0, curr - net)
+    df.at[idx, "Number of Lectures"] = new
+    df.at[idx, "Last Updated"] = today.strftime("%Y-%m-%d")
     save_backlog(df)
     log_history_if_needed(df["Number of Lectures"].sum())
     st.cache_data.clear()
     st.experimental_rerun()
 
 def estimate(df, pace):
-    net_weekly=pace*7-6
-    out={}
-    for _,r in df.iterrows():
-        b=int(r["Number of Lectures"])
-        days=math.inf if net_weekly<=0 else math.ceil(b*7/net_weekly)
-        out[r["Subject"]]=days
+    net_weekly = pace * 7 - 6
+    out = {}
+    for _, r in df.iterrows():
+        b = int(r["Number of Lectures"])
+        if net_weekly <= 0:
+            days = math.inf
+        else:
+            days = math.ceil(b * 7 / net_weekly)
+        out[r["Subject"]] = days
     return out
 
-# ==== UI ====
-st.set_page_config(page_title="JEE Backlog",layout="centered")
+# ==== STREAMLIT UI ====
+st.set_page_config(page_title="JEE Backlog", layout="centered")
 st.title("📚 JEE Backlog Tracker")
 
-# 1) Load and auto‐sync
-data=load_backlog()
-data=auto_increment_once(data)
+# 1) Load & auto-sync
+data = load_backlog()
+data = auto_increment_once(data)
 
 # 2) Mark as Done
 st.subheader("✅ Mark Lectures Done")
 if data.empty:
     st.info("No subjects yet. Add one below.")
 else:
-    cols=st.columns([3,2,2])
-    sub=cols[0].selectbox("Subject", data["Subject"])
-    done=cols[1].number_input("Lectures done",0,step=1)
-    if cols[2].button("Mark Done"):
-        mark_done(data,sub,done)
+    c1, c2, c3 = st.columns([3, 2, 2])
+    subject = c1.selectbox("Subject", data["Subject"])
+    done = c2.number_input("Lectures done", min_value=0, step=1, key="done_input")
+    if c3.button("Mark Done"):
+        mark_done(data, subject, done)
 
 st.markdown("---")
 
 # 3) Force Sync
 if st.button("🔄 Force Sync"):
-    data=auto_increment_once(data)
+    data = auto_increment_once(data)
     st.success("Synced!")
     st.experimental_rerun()
 
@@ -136,17 +146,17 @@ st.markdown("---")
 
 # 4) Add Subject
 st.subheader("➕ Add New Subject")
-with st.form("add"):
-    new_sub=st.text_input("Subject Name").strip()
-    new_back=st.number_input("Starting Backlog",0,step=1)
+with st.form("add_form"):
+    new_sub = st.text_input("Subject Name").strip()
+    new_back = st.number_input("Starting Backlog", min_value=0, step=1)
     if st.form_submit_button("Add"):
         if not new_sub:
             st.warning("Enter a subject.")
         elif new_sub in data["Subject"].tolist():
             st.warning("Subject already exists.")
         else:
-            today=datetime.date.today().strftime("%Y-%m-%d")
-            ws.append_row([new_sub,int(new_back),today])
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+            ws.append_row([new_sub, int(new_back), today_str])
             st.cache_data.clear()
             st.success(f"Added {new_sub}.")
             st.experimental_rerun()
@@ -154,22 +164,23 @@ with st.form("add"):
 st.markdown("---")
 
 # 5) History Graph & ETA
-hist=load_history()
+hist = load_history()
 if hist.empty:
     st.info("No history to plot yet.")
 else:
-    hist["Date"]=pd.to_datetime(hist["Date"])
-    hist["Total Backlog"]=hist["Total Backlog"].astype(int)
-    fig,ax=plt.subplots()
-    ax.plot(hist["Date"],hist["Total Backlog"],marker="o")
+    hist["Date"] = pd.to_datetime(hist["Date"])
+    hist["Total Backlog"] = hist["Total Backlog"].astype(int)
+    fig, ax = plt.subplots()
+    ax.plot(hist["Date"], hist["Total Backlog"], marker="o", linestyle="-")
     ax.set_title("Backlog Over Time")
+    ax.set_xlabel("Date"); ax.set_ylabel("Lectures")
     st.pyplot(fig)
 
 st.subheader("⏱ Estimated Time to Clear Backlog")
-pace=st.slider("Daily pace",1,10,1)
-est=estimate(data,pace)
-est_df=pd.DataFrame([{"Subject":s,"Days":d,"Weeks":d//7} for s,d in est.items()])
-if not est_df.empty:
+pace = st.slider("Daily pace (lectures/day)", 1, 10, 1)
+est = estimate(data, pace)
+if est:
+    est_df = pd.DataFrame([{"Subject":s,"Days":d,"Weeks":d//7} for s,d in est.items()])
     st.table(est_df)
 else:
-    st.info("Add a subject to estimate.")
+    st.info("No subjects to estimate.")
