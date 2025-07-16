@@ -16,7 +16,7 @@ client = gspread.authorize(creds)
 try:
     sheet = client.open(SHEET_NAME).sheet1
 except:
-    sheet = client.create(SHEET_NAME).sheet1
+    sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1jeooSyD_3NTroYkIQwL5upJh5hC4l3J4cGXw07352EI/edit").sheet1
     sheet.append_row(["Subject", "Backlog", "Completed", "Last Updated"])
 
 # Convert sheet to DataFrame
