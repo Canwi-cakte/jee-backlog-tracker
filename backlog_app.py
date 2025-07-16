@@ -55,7 +55,6 @@ def load_history():
 def log_history_if_needed(total_backlog):
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     hist = load_history()
-    # Only append if today's entry is missing
     if hist.empty or hist["Date"].iloc[-1] != today_str:
         hist_ws.append_row([today_str, int(total_backlog)])
 
@@ -63,10 +62,8 @@ def log_history_if_needed(total_backlog):
 def auto_increment_once(df):
     today = datetime.date.today()
     hist = load_history()
-    # If we've already logged today, skip
     if not hist.empty and hist["Date"].iloc[-1] == today.strftime("%Y-%m-%d"):
         return df
-    # Sundays get no auto‑increment
     if today.weekday() == 6:
         return df
 
@@ -91,9 +88,9 @@ def mark_done(df, subject, done):
     today = datetime.date.today()
     idx = df.index[df["Subject"] == subject][0]
     curr = int(df.at[idx, "Number of Lectures"])
-    if today.weekday() == 6:  # Sunday: each lecture reduces backlog by 1
+    if today.weekday() == 6:  # Sunday
         new = max(0, curr - done)
-    else:                     # Weekday: need done‑1 net to reduce by 1
+    else:  # Weekday
         net = done - 1
         new = max(0, curr - net)
     df.at[idx, "Number of Lectures"] = new
@@ -101,7 +98,7 @@ def mark_done(df, subject, done):
     save_backlog(df)
     log_history_if_needed(df["Number of Lectures"].sum())
     st.cache_data.clear()
-    st.experimental_rerun()
+    return df
 
 def estimate(df, pace):
     net_weekly = pace * 7 - 6
@@ -132,7 +129,9 @@ else:
     subject = c1.selectbox("Subject", data["Subject"])
     done = c2.number_input("Lectures done", min_value=0, step=1, key="done_input")
     if c3.button("Mark Done"):
-        mark_done(data, subject, done)
+        data = mark_done(data, subject, done)
+        st.success(f"Updated {subject} by {done} lectures.")
+        st.experimental_rerun()
 
 st.markdown("---")
 
@@ -157,7 +156,6 @@ with st.form("add_form"):
         else:
             today_str = datetime.date.today().strftime("%Y-%m-%d")
             ws.append_row([new_sub, int(new_back), today_str])
-            st.cache_data.clear()
             st.success(f"Added {new_sub}.")
             st.experimental_rerun()
 
