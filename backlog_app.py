@@ -151,6 +151,19 @@ with st.form("add_form"):
 
 st.markdown("---")
 
+# 5) Remove Subject
+st.subheader("🗑️ Remove Subject")
+if len(df) == 0:
+    st.info("No subjects to remove.")
+else:
+    subject_to_remove = st.selectbox("Select Subject to Remove", df["Subject"])
+    if st.button("Remove Subject"):
+        df = df[df["Subject"] != subject_to_remove].reset_index(drop=True)
+        save_backlog(df)
+        log_history(df["Number of Lectures"].sum())
+        st.session_state.df = df
+        st.success(f"Removed subject '{subject_to_remove}'.")
+        
 # 5) Estimated Time to Clear Backlog
 st.subheader("⏱ Estimated Time to Clear Backlog")
 pace = st.slider("Your daily pace (lectures/day)", 1, 10, 1)
