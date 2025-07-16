@@ -129,12 +129,14 @@ with st.form("add_form"):
     lec = st.number_input("🎥 No. of Lectures", min_value=1, step=1)
     submitted = st.form_submit_button("Add Subject")
     if submitted:
-        if sub in data["Subject"].values:
-            st.warning("Subject already exists!")
+        if not data.empty and "Subject" in data.columns and sub in data["Subject"].values:
+            # subject exists — update it
+            idx = data.index[data["Subject"] == sub][0]
+            data.at[idx, "Lectures"] = int(data.at[idx, "Lectures"]) + lectures
         else:
-            today = str(datetime.date.today())
-            data = pd.concat([data, pd.DataFrame([[sub, lec, today]], columns=["Subject", "Lectures", "Last Updated"])], ignore_index=True)
-            st.success("Added!")
+            # new subject — add it
+            data.loc[len(data)] = [sub, lectures, today.strftime("%Y-%m-%d")]
+
 
 # Display Subjects
 for i in range(len(data)):
