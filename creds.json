@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "backlog-tracker-466114",
+  "private_key_id": "f079fda1d9cd43b3cd4d342d286c53ca18aa637e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDNoST88gnMkcEE\n1Wunp7ILgLrPkBC2S0l4FuX/blzzaVlMh8blhAn+HekCHgpr8N/UfN6ZrHThYsOo\nUAflly9JhiyOe+UhoPldUDqBbCwU2yvoSPZh+jj1ncJXzVaDkht7pGHpzXaoZdsr\nnv6uN1oSw1A+ssUQbt7srMG3/WjOaeyxI07rAtTVWwUrNJPzvY8WosSrQYNhnwWV\nMLh9kEe38PvLdTxowSCXqBSK/In/8w5w/5RFCznP8LTZBOyBvIrecwJRAV/hTzZb\nSgtT7U1JWF5Y27BjvVJiMa+UsJDj+Rd3LDmhEc8iFzXfXOD31Mq8pQSHfikCMerq\npd4rPSW5AgMBAAECggEARRd6qqUW5s4omVuujwg5OkU4P8rL2rykRH4JLNDj2YPR\n1fWfPnols2VQZ/45CTjHtIl6cA8yvJJnZJPze1DXujAjo4J8pFaGwzRUXC1BCIb2\nE1gEtToSznCCHudnRNEge+RpY9o+HuoOgPMs5tPBZ6GJwm9l6JYgQEzx0EUM5KG2\n+kI+11ir5IKbmjoofwr8gXgkchTL+WIs9IYn6rLXHcWq2zIw8M1LOLZHcgS3eFR3\n4v9plZNQ+abNB9Vaj8vHTLBlk6qF988dH1Vz3210fMxfzMcCAg4NQ0vAM60Pk08F\nlGsVG47KHrlceujmS4BRJb73GglZY9HzN3XSWGdOSwKBgQD6QoLd1ADHT/8zlSrk\n8aOziLitvyo3XGe+8+ro/VAexQnICpPz+ZRXrEL+2N+D8yrG29YPupgXz7YTqYs4\nJ2VKDWd3ENcUo8ovfNsYj3w1QZhD3Vld/5ZIVCDfatf9CAcKYXED7C/kxJWoggsc\nCP5l5woBBX9V5W0nwU4CidGcVwKBgQDSWJIMVg2ZmcRshX3d2Fqa/5BaYfEnJ1pA\n0JxOIMFqLaq5gze3mQG2RCrbQDFiyUeHuJrdnyB8gA3o78lJzZwdrEhq/rBmDnnZ\nhK70wbez2CU9FYa99iap33Vxmiy1Z/lRgHgeWWh/ErUmVf8pY+w2mVNp8LktTSB5\nybqDsr8EbwKBgDyezdp0FzgwfY3+LSTGD7RWgv27V7uPS6YqqZWEftrlOchWH56y\nrydJl/TpjcMFrS/8Ym7u8RabfuxmXk3c5SE5+/0QfDkIr9ou8VeSsjCoUfzmalZl\nqf6dOlVEKUumnSX7koezt6o/oEzwK0bAOvduLrMupLim2XkOzxm4TqkDAoGBALIp\n3xqf0MknWx5oO2IqnSPoD4beqnn1dRatG5d5WxnqME8Ne6YA7VhKiNpIlwwLXJDy\npgnNfKC3fhCs+ZuPkgn4ISavLw5ieIbrQZ2Cb2zfSTth/kzsL3d3FGzyn6fPt3d3\nD0b1h/MKD3G3KXcPccYVPHfhM5fRWg6N9XMTdYP1AoGAbzdQzzgxGz9uyZ67PvVn\ntxkQQhkNdgavtNbCMPFRxHLz8yXK01GRlGnmGi6f+PQDsSAc8fKD/WWfqlbUlK3E\n4YIxkUGGXUfQeMRJOjMUmNMUAyd8B2TVwpDkWR4mtzKHCLezdj48tBqNZhRN/nJO\nr7vy5YXRJXfAsJHINtQ0lQg=\n-----END PRIVATE KEY-----\n",
+  "client_email": "backlog-tracker-service@backlog-tracker-466114.iam.gserviceaccount.com",
+  "client_id": "115009259160152041773",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/backlog-tracker-service%40backlog-tracker-466114.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
